@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	_ "github.com/influxdata/influxdb1-client"
@@ -15,7 +16,21 @@ type nodestat struct {
 	memBw float64
 }
 
+func createRoof(peakMemBw float64, peakFlopsAny float64) map[string][]float64 {
+	yCut := 0.01 * peakMemBw
+	knee := (peakFlopsAny - yCut) / peakMemBw
+	roof := make(map[string][]float64)
+
+	roof["x"] = []float64{0.01, knee, 1000}
+	roof["y"] = []float64{yCut, peakFlopsAny, peakFlopsAny}
+
+	return roof
+}
+
 func main() {
+	log.SetPrefix("roof: ")
+	log.SetFlags(log.Ldate | log.Lmicroseconds | log.Llongfile)
+
 	c, err := client.NewHTTPClient(client.HTTPConfig{
 		Addr: "http://localhost:8086",
 	})
@@ -55,29 +70,24 @@ func main() {
 		}
 		xval[i] = ns.flops / ns.memBw
 		yval[i] = ns.flops * 0.001
+
 		i++
 	}
 
-	yCut := 0.01 * 80.0
-	scalarKnee := (44.0 - yCut) / 80.0
-	simdKnee := (704.0 - yCut) / 80.0
-
-	xRoofSimd := []float64{0.01, simdKnee, 1000}
-	yRoofSimd := []float64{yCut, 704.0, 704.0}
-	xRoofScalar := []float64{0.01, scalarKnee, 1000}
-	yRoofScalar := []float64{yCut, 44.0, 44.0}
 	last := fmt.Sprintf("last updated: %s", time.Now().Format("Mon Jan 2 15:04 2006"))
 
 	p := gnuplot.Plot{Filename: "roofline.png",
 		Title:    last,
 		Xlabel:   "Intensity [flops/byte]",
 		Ylabel:   "Performance [MFlops/s]",
-		Logscale: "x, y",
-		Xrange:   gnuplot.Range{From: "0", To: "1000"},
+		Logscale: "xy",
+		Xrange:   gnuplot.Range{From: "0.009", To: "1000"},
 		Yrange:   gnuplot.Range{From: "0", To: "1000"}}
 
-	p.AddData(&gnuplot.Dataset{Datafile: "siroof.dat", Title: "simd", Style: "lines"}, xRoofSimd, yRoofSimd)
-	p.AddData(&gnuplot.Dataset{Datafile: "scroof.dat", Title: "scalar", Style: "lines"}, xRoofScalar, yRoofScalar)
-	p.AddData(&gnuplot.Dataset{Datafile: "nodes.dat", Title: "", Style: "points ls 1"}, xval, yval)
+	roof := createRoof(80.0, 704.0)
+	p.AddData(&gnuplot.Dataset{Datafile: "siroof.dat", Title: "simd", Style: "lines lc \"red\" lw 3"}, roof["x"], roof["y"])
+	roof = createRoof(80.0, 44.0)
+	p.AddData(&gnuplot.Dataset{Datafile: "scroof.dat", Title: "scalar", Style: "lines lc \"blue\" lw 3"}, roof["x"], roof["y"])
+	p.AddData(&gnuplot.Dataset{Datafile: "nodes.dat", Title: "", Style: "circles fs solid 1.0  border -1  fc \"aquamarine\""}, xval, yval)
 	p.Create()
 }

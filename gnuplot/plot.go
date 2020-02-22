@@ -44,7 +44,7 @@ func (p *Plot) AddData(d *Dataset, x []float64, y []float64) {
 		os.Exit(1)
 	}
 
-	fmt.Fprintf(f, "# %s ", d.Title)
+	fmt.Fprintf(f, "# %s\n", d.Title)
 
 	for i := 0; i < len(x); i++ {
 		fmt.Fprintf(f, "%f %f\n", x[i], y[i])
@@ -69,10 +69,11 @@ set xlabel '{{.Xlabel}}'
 set ylabel '{{.Ylabel}}'
 set xrange [{{.Xrange.From}}:{{.Xrange.To}}]
 set yrange [{{.Yrange.From}}:{{.Yrange.To}}]
-{{if .Logscale}}set logscale '{.Logscale}'
+{{if .Logscale}}set logscale {{.Logscale}}
 {{end}}
-{{range .Sets}}plot '{{.Datafile}}' u {{.Using}} t "{{.Title}}" w {{.Style}}
-{{end}}
+set style circle radius graph 0.008
+plot {{range .Sets}} '{{.Datafile}}' t "{{.Title}}" w {{.Style}},
+{{- end}}
 `
 	f, err := os.Create("gp.plot")
 	if err != nil {
@@ -89,5 +90,7 @@ set yrange [{{.Yrange.From}}:{{.Yrange.To}}]
 	cmd := exec.Command("gnuplot", "gp.plot")
 	log.Printf("Running gnuplot and waiting for it to finish...")
 	err = cmd.Run()
-	log.Printf("Command finished with error: %v", err)
+	if err != nil {
+		log.Printf("Command finished with error: %v", err)
+	}
 }
