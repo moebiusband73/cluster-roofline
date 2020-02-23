@@ -28,6 +28,7 @@ type Plot struct {
 	Logscale string
 	Xrange   Range
 	Yrange   Range
+	Style    []string
 	Sets     []Dataset
 }
 
@@ -71,7 +72,8 @@ set xrange [{{.Xrange.From}}:{{.Xrange.To}}]
 set yrange [{{.Yrange.From}}:{{.Yrange.To}}]
 {{if .Logscale}}set logscale {{.Logscale}}
 {{end}}
-set style circle radius graph 0.008
+{{range $i, $e := .Style}} set style {{$e}}
+{{end}}
 plot {{range .Sets}} '{{.Datafile}}' t "{{.Title}}" w {{.Style}},
 {{- end}}
 `

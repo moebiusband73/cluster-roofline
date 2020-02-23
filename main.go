@@ -27,19 +27,8 @@ func createRoof(peakMemBw float64, peakFlopsAny float64) map[string][]float64 {
 	return roof
 }
 
-func main() {
-	log.SetPrefix("roof: ")
-	log.SetFlags(log.Ldate | log.Lmicroseconds | log.Llongfile)
-
-	c, err := client.NewHTTPClient(client.HTTPConfig{
-		Addr: "http://localhost:8086",
-	})
-	if err != nil {
-		fmt.Println("Error creating InfluxDB Client: ", err.Error())
-	}
-	defer c.Close()
-
-	qf := client.NewQuery("SELECT flops_any FROM data GROUP BY \"host\" ORDER BY time DESC LIMIT 1", "ClusterCockpit", "s")
+func getCluster(match string, c client.Client) ([]float64, []float64) {
+	qf := client.NewQuery("SELECT flops_sp+2*flops_dp FROM data WHERE host =~ /["+match+"]/ GROUP BY \"host\" ORDER BY time DESC LIMIT 1", "ClusterCockpit", "s")
 	m := make(map[string]*nodestat)
 
 	if response, err := c.Query(qf); err == nil && response.Error() == nil {
@@ -50,7 +39,7 @@ func main() {
 		}
 	}
 
-	qm := client.NewQuery("SELECT mem_bw FROM data GROUP BY \"host\" ORDER BY time DESC LIMIT 1", "ClusterCockpit", "s")
+	qm := client.NewQuery("SELECT mem_bw FROM data WHERE host =~ /["+match+"]/ GROUP BY \"host\" ORDER BY time DESC LIMIT 1", "ClusterCockpit", "s")
 	if response, err := c.Query(qm); err == nil && response.Error() == nil {
 		for _, row := range response.Results[0].Series {
 			v := row.Values[0][1].(json.Number)
@@ -74,6 +63,21 @@ func main() {
 		i++
 	}
 
+	return xval, yval
+}
+
+func main() {
+	log.SetPrefix("roof: ")
+	log.SetFlags(log.Ldate | log.Lmicroseconds | log.Llongfile)
+
+	c, err := client.NewHTTPClient(client.HTTPConfig{
+		Addr: "http://localhost:8086",
+	})
+	if err != nil {
+		fmt.Println("Error creating InfluxDB Client: ", err.Error())
+	}
+	defer c.Close()
+
 	last := fmt.Sprintf("last updated: %s", time.Now().Format("Mon Jan 2 15:04 2006"))
 
 	p := gnuplot.Plot{Filename: "roofline.png",
@@ -84,10 +88,18 @@ func main() {
 		Xrange:   gnuplot.Range{From: "0.009", To: "1000"},
 		Yrange:   gnuplot.Range{From: "0", To: "1000"}}
 
+	p.Style = append(p.Style, "circle radius graph 0.008")
+
 	roof := createRoof(80.0, 704.0)
-	p.AddData(&gnuplot.Dataset{Datafile: "siroof.dat", Title: "simd", Style: "lines lc \"red\" lw 3"}, roof["x"], roof["y"])
+	p.AddData(&gnuplot.Dataset{Datafile: "siroof.dat", Title: "Emmy - simd", Style: "lines lc \"red\" lw 3"}, roof["x"], roof["y"])
 	roof = createRoof(80.0, 44.0)
-	p.AddData(&gnuplot.Dataset{Datafile: "scroof.dat", Title: "scalar", Style: "lines lc \"blue\" lw 3"}, roof["x"], roof["y"])
-	p.AddData(&gnuplot.Dataset{Datafile: "nodes.dat", Title: "", Style: "circles fs solid 1.0  border -1  fc \"aquamarine\""}, xval, yval)
+	p.AddData(&gnuplot.Dataset{Datafile: "scroof.dat", Title: "Emmy - scalar", Style: "lines lc \"blue\" lw 3"}, roof["x"], roof["y"])
+
+	xval, yval := getCluster("e", c)
+	p.AddData(&gnuplot.Dataset{Datafile: "nodes-emmy.dat", Title: "Emmy nodes", Style: "circles fs solid 1.0  border -1  fc \"aquamarine\""}, xval, yval)
+	xval, yval = getCluster("w", c)
+	p.AddData(&gnuplot.Dataset{Datafile: "nodes-woody.dat", Title: "Woody nodes", Style: "circles fs solid 1.0  border -1  fc \"cyan\""}, xval, yval)
+	xval, yval = getCluster("m", c)
+	p.AddData(&gnuplot.Dataset{Datafile: "nodes-meggie.dat", Title: "Meggie nodes", Style: "circles fs solid 1.0  border -1  fc \"cyan\""}, xval, yval)
 	p.Create()
 }
