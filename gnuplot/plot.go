@@ -63,13 +63,14 @@ func (p *Plot) AddData(d *Dataset, x []float64, y []float64) {
 
 func (p *Plot) Create() {
 	const gpTemplate = `
-set terminal png size 1400,768 enhanced font ,12
+set terminal png size 1400,768 enhanced font ,16
 set output '{{.Filename}}'
 set title  '{{.Title}}'
 set xlabel '{{.Xlabel}}'
 set ylabel '{{.Ylabel}}'
 set xrange [{{.Xrange.From}}:{{.Xrange.To}}]
 set yrange [{{.Yrange.From}}:{{.Yrange.To}}]
+set key left top
 {{if .Logscale}}set logscale {{.Logscale}}
 {{end}}
 {{range $i, $e := .Style}} set style {{$e}}
